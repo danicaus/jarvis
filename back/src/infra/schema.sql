@@ -1,22 +1,22 @@
 CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,
   google_sub TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now())
 );
 
 CREATE TABLE IF NOT EXISTS inbox (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   conteudo TEXT NOT NULL,
-  timestamp TEXT NOT NULL,
+  timestamp TIMESTAMPTZ NOT NULL,
   origem TEXT NOT NULL CHECK (origem IN ('texto', 'voz', 'foto'))
 );
 
 CREATE TABLE IF NOT EXISTS sessoes_processamento (
   session_id TEXT PRIMARY KEY,
-  started_at TEXT NOT NULL,
+  started_at TIMESTAMPTZ NOT NULL,
   status TEXT NOT NULL,
-  items TEXT NOT NULL,
+  items JSONB NOT NULL,
   item_atual INTEGER NOT NULL DEFAULT 0
 );

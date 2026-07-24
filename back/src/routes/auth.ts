@@ -25,7 +25,7 @@ authRouter.post('/google', async (req, res) => {
     throw new ForbiddenError({ message: 'email não autorizado' });
   }
 
-  const user = userModel.upsertFromGoogleProfile(profile);
+  const user = await userModel.upsertFromGoogleProfile(profile);
 
   const token = jwt.sign({ sub: String(user.id) }, config.jwtSecret, { expiresIn: '7d' });
   res.cookie('token', token, {
@@ -37,8 +37,8 @@ authRouter.post('/google', async (req, res) => {
   res.json({ email: user.email, name: user.name });
 });
 
-authRouter.get('/me', requireAuth, (req, res) => {
-  const user = userModel.findById(req.userId!);
+authRouter.get('/me', requireAuth, async (req, res) => {
+  const user = await userModel.findById(req.userId!);
   if (!user) {
     throw new UnauthorizedError({ message: 'não autenticado' });
   }

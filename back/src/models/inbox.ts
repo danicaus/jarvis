@@ -1,35 +1,45 @@
 import { db } from '../infra/database';
 import type { InboxItem, Origem } from '../types';
 
-const insertStatement = db.prepare(`INSERT INTO inbox (conteudo, timestamp, origem) VALUES (?, ?, ?)`);
-const listStatement = db.prepare(`SELECT id, conteudo, timestamp, origem FROM inbox ORDER BY id DESC`);
-const findByIdStatement = db.prepare(`SELECT id, conteudo, timestamp, origem FROM inbox WHERE id = ?`);
-const updateStatement = db.prepare(`UPDATE inbox SET conteudo = ? WHERE id = ?`);
-const removeStatement = db.prepare(`DELETE FROM inbox WHERE id = ?`);
+// `timestamp` volta do driver `pg` como `Date`, não `string` — mas res.json() já
+// serializa Date como ISO automaticamente, então o formato na API não muda.
 
-export function list(): InboxItem[] {
-  return listStatement.all() as InboxItem[];
+export async function list(): Promise<InboxItem[]> {
+  const result = await db.query<InboxItem>(
+    'SELECT id, conteudo, timestamp, origem FROM inbox ORDER BY id DESC',
+  );
+  return result.rows;
 }
 
-export function findById(id: number): InboxItem | undefined {
-  return findByIdStatement.get(id) as InboxItem | undefined;
+export async function findById(id: number): Promise<InboxItem | undefined> {
+  const result = await db.query<InboxItem>(
+    'SELECT id, conteudo, timestamp, origem FROM inbox WHERE id = $1',
+    [id],
+  );
+  return result.rows[0];
 }
 
-export function add(conteudo: string, origem: Origem): InboxItem {
+export async function add(conteudo: string, origem: Origem): Promise<InboxItem> {
   const timestamp = new Date().toISOString();
-  const result = insertStatement.run(conteudo, timestamp, origem);
-  return { id: Number(result.lastInsertRowid), conteudo, timestamp, origem };
+  const result = await db.query<InboxItem>(
+    `INSERT INTO inbox (conteudo, timestamp, origem)
+     VALUES ($1, $2, $3)
+     RETURNING id, conteudo, timestamp, origem`,
+    [conteudo, timestamp, origem],
+  );
+  return result.rows[0];
 }
 
-export function update(id: number, conteudo: string): InboxItem | undefined {
-  const existing = findById(id);
-  if (!existing) return undefined;
-
-  updateStatement.run(conteudo, id);
-  return { ...existing, conteudo };
+export async function update(id: number, conteudo: string): Promise<InboxItem | undefined> {
+  const result = await db.query<InboxItem>(
+    `UPDATE inbox SET conteudo = $1 WHERE id = $2
+     RETURNING id, conteudo, timestamp, origem`,
+    [conteudo, id],
+  );
+  return result.rows[0];
 }
 
-export function remove(id: number): boolean {
-  const result = removeStatement.run(id);
-  return result.changes > 0;
+export async function remove(id: number): Promise<boolean> {
+  const result = await db.query('DELETE FROM inbox WHERE id = $1', [id]);
+  return (result.rowCount ?? 0) > 0;
 }

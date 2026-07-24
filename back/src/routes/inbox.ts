@@ -7,11 +7,11 @@ export const inboxRouter = Router();
 
 const ORIGENS_VALIDAS: Origem[] = ['texto', 'voz', 'foto'];
 
-inboxRouter.get('/', (_req, res) => {
-  res.json(inboxRepository.list());
+inboxRouter.get('/', async (_req, res) => {
+  res.json(await inboxRepository.list());
 });
 
-inboxRouter.post('/', (req, res) => {
+inboxRouter.post('/', async (req, res) => {
   const conteudo = typeof req.body?.conteudo === 'string' ? req.body.conteudo.trim() : '';
   if (!conteudo) {
     throw new ValidationError({ message: 'conteudo obrigatório' });
@@ -22,10 +22,10 @@ inboxRouter.post('/', (req, res) => {
     throw new ValidationError({ message: `origem deve ser um de: ${ORIGENS_VALIDAS.join(', ')}` });
   }
 
-  res.status(201).json(inboxRepository.add(conteudo, origem));
+  res.status(201).json(await inboxRepository.add(conteudo, origem));
 });
 
-inboxRouter.patch('/:id', (req, res) => {
+inboxRouter.patch('/:id', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     throw new ValidationError({ message: 'id inválido' });
@@ -36,7 +36,7 @@ inboxRouter.patch('/:id', (req, res) => {
     throw new ValidationError({ message: 'conteudo obrigatório' });
   }
 
-  const item = inboxRepository.update(id, conteudo);
+  const item = await inboxRepository.update(id, conteudo);
   if (!item) {
     throw new NotFoundError({ message: 'item não encontrado no inbox' });
   }
@@ -44,13 +44,13 @@ inboxRouter.patch('/:id', (req, res) => {
   res.json(item);
 });
 
-inboxRouter.delete('/:id', (req, res) => {
+inboxRouter.delete('/:id', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     throw new ValidationError({ message: 'id inválido' });
   }
 
-  const removed = inboxRepository.remove(id);
+  const removed = await inboxRepository.remove(id);
   if (!removed) {
     throw new NotFoundError({ message: 'item não encontrado no inbox' });
   }

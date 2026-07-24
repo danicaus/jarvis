@@ -1,12 +1,17 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import Database from 'better-sqlite3';
+import { Pool } from 'pg';
 import { config } from '../config';
 
-fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
-
-export const db = new Database(config.dbPath);
-db.pragma('journal_mode = WAL');
+// rejectUnauthorized: false evita atrito com a cadeia de certificado do Neon —
+// prática comum ao conectar via `pg` a Postgres gerenciado (Neon, Supabase etc.)
+export const db = new Pool({
+  connectionString: config.databaseUrl,
+  ssl: { rejectUnauthorized: false },
+});
 
 const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
-db.exec(schema);
+
+export function ensureSchema(): Promise<unknown> {
+  return db.query(schema);
+}

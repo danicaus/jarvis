@@ -1,4 +1,3 @@
-import path from 'node:path';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -22,5 +21,5 @@ export const config = {
       .map((email) => email.trim().toLowerCase())
       .filter(Boolean),
   ),
-  dbPath: process.env.DB_PATH || path.join(__dirname, '..', 'data', 'app.db'),
+  databaseUrl: required('DATABASE_URL'),
 };
