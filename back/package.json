@@ -7,7 +7,12 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc && cp src/infra/schema.sql dist/infra/schema.sql",
     "start": "node dist/index.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "docker:up:test": "docker compose -f src/infra/compose.test.yaml up -d",
+    "docker:down:test": "docker compose -f src/infra/compose.test.yaml down",
+    "pretest": "npm run docker:up:test",
+    "test": "cross-env NODE_ENV=test vitest run",
+    "posttest": "npm run docker:down:test"
   },
   "dependencies": {
     "cookie-parser": "^1.4.6",
@@ -25,7 +30,11 @@
     "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^24.0.0",
     "@types/pg": "^8.11.10",
+    "@types/supertest": "^6.0.2",
+    "cross-env": "^7.0.3",
+    "supertest": "^7.0.0",
     "tsx": "^4.19.1",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
   }
 }

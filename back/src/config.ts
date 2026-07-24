@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
 
-dotenv.config();
+dotenv.config({ path: process.env.NODE_ENV === 'test' ? '.env.test' : '.env' });
 
 function required(name: string): string {
   const value = process.env[name];
@@ -22,4 +22,6 @@ export const config = {
       .filter(Boolean),
   ),
   databaseUrl: required('DATABASE_URL'),
+  // Neon exige SSL; o Postgres local do Docker (testes) não tem SSL habilitado.
+  databaseSsl: process.env.NODE_ENV !== 'test',
 };

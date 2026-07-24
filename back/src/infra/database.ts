@@ -7,7 +7,7 @@ import { config } from '../config';
 // prática comum ao conectar via `pg` a Postgres gerenciado (Neon, Supabase etc.)
 export const db = new Pool({
   connectionString: config.databaseUrl,
-  ssl: { rejectUnauthorized: false },
+  ssl: config.databaseSsl ? { rejectUnauthorized: false } : false,
 });
 
 const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
