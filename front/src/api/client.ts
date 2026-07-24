@@ -25,6 +25,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     throw new Error(`Erro ${response.status} em ${path}`);
   }
 
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
   return response.json();
 }
 
@@ -48,4 +52,15 @@ export function addInboxItem(conteudo: string): Promise<InboxItem> {
     method: 'POST',
     body: JSON.stringify({ conteudo }),
   });
+}
+
+export function updateInboxItem(id: number, conteudo: string): Promise<InboxItem> {
+  return request(`/api/inbox/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ conteudo }),
+  });
+}
+
+export function deleteInboxItem(id: number): Promise<void> {
+  return request(`/api/inbox/${id}`, { method: 'DELETE' });
 }

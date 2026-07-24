@@ -67,6 +67,27 @@ export class ForbiddenError extends Error {
   }
 }
 
+export class NotFoundError extends Error {
+  action: string;
+  statusCode: number;
+
+  constructor({ cause, message, action }: ErrorOptions = {}) {
+    super(message ?? 'Não foi possível encontrar este recurso', { cause });
+    this.name = 'NotFoundError';
+    this.action = action ?? 'Verifique se o identificador está correto';
+    this.statusCode = 404;
+  }
+
+  toJSON() {
+    return {
+      name: this.name,
+      message: this.message,
+      action: this.action,
+      status_code: this.statusCode,
+    };
+  }
+}
+
 export class InternalServerError extends Error {
   action: string;
   statusCode: number;

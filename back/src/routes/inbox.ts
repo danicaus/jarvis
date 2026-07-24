@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import * as inboxRepository from '../models/inbox';
 import type { Origem } from '../types';
-import { ValidationError } from '../infra/errors';
+import { ValidationError, NotFoundError } from '../infra/errors';
 
 export const inboxRouter = Router();
 
@@ -23,4 +23,37 @@ inboxRouter.post('/', (req, res) => {
   }
 
   res.status(201).json(inboxRepository.add(conteudo, origem));
+});
+
+inboxRouter.patch('/:id', (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    throw new ValidationError({ message: 'id inválido' });
+  }
+
+  const conteudo = typeof req.body?.conteudo === 'string' ? req.body.conteudo.trim() : '';
+  if (!conteudo) {
+    throw new ValidationError({ message: 'conteudo obrigatório' });
+  }
+
+  const item = inboxRepository.update(id, conteudo);
+  if (!item) {
+    throw new NotFoundError({ message: 'item não encontrado no inbox' });
+  }
+
+  res.json(item);
+});
+
+inboxRouter.delete('/:id', (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    throw new ValidationError({ message: 'id inválido' });
+  }
+
+  const removed = inboxRepository.remove(id);
+  if (!removed) {
+    throw new NotFoundError({ message: 'item não encontrado no inbox' });
+  }
+
+  res.status(204).end();
 });
