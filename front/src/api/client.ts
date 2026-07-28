@@ -1,4 +1,6 @@
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
+// Em produção, sem VITE_API_URL definida, cai pra caminho relativo — o vercel.json
+// do front faz o proxy reverso pro back same-origin (necessário pro cookie de sessão).
+const API_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:3001' : '');
 
 export type Origem = 'texto' | 'voz' | 'foto';
 
