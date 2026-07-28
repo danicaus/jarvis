@@ -21,3 +21,7 @@ app.use('/api/inbox', requireAuth, inboxRouter);
 // Precisa ser o último app.use — Express só reconhece como error handler pela posição
 // (depois de todas as rotas) e pela assinatura de 4 parâmetros.
 app.use(errorHandler);
+
+// Export default exigido pela Vercel: ela escaneia src/app.ts antes de src/index.ts
+// e espera um default export (ou app.listen) nesse arquivo especificamente.
+export default app;
