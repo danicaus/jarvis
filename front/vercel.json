@@ -1,0 +1,7 @@
+{
+  "rewrites": [
+    { "source": "/health", "destination": "https://jarvis-backend-seven-henna.vercel.app/health" },
+    { "source": "/auth/:path*", "destination": "https://jarvis-backend-seven-henna.vercel.app/auth/:path*" },
+    { "source": "/api/:path*", "destination": "https://jarvis-backend-seven-henna.vercel.app/api/:path*" }
+  ]
+}
