@@ -1,28 +1,69 @@
 import { Router } from 'express';
 import * as inboxRepository from '../models/inbox';
-import type { Origem } from '../types';
-import { ValidationError, NotFoundError } from '../infra/errors';
+import type { Tipo } from '../types';
+import { ValidationError, NotFoundError, ConflictError } from '../infra/errors';
 
 export const inboxRouter = Router();
 
-const ORIGENS_VALIDAS: Origem[] = ['texto', 'voz', 'foto'];
+const TIPOS_VALIDOS: Tipo[] = ['texto', 'audio', 'imagem'];
+
+function parseTags(input: unknown): string[] {
+  if (!Array.isArray(input)) {
+    throw new ValidationError({ message: 'tags deve ser um array' });
+  }
+  const tags = input
+    .filter((tag): tag is string => typeof tag === 'string')
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+  if (tags.length === 0) {
+    throw new ValidationError({ message: 'ao menos uma tag é obrigatória' });
+  }
+  return tags;
+}
+
+function parseBlob(input: unknown, campo: string): Buffer | undefined {
+  if (input === undefined || input === null) return undefined;
+  if (typeof input !== 'string' || !input) {
+    throw new ValidationError({ message: `${campo} deve ser uma string base64` });
+  }
+  return Buffer.from(input, 'base64');
+}
 
 inboxRouter.get('/', async (_req, res) => {
   res.json(await inboxRepository.list());
 });
 
 inboxRouter.post('/', async (req, res) => {
-  const conteudo = typeof req.body?.conteudo === 'string' ? req.body.conteudo.trim() : '';
-  if (!conteudo) {
-    throw new ValidationError({ message: 'conteudo obrigatório' });
+  const tipo = req.body?.tipo;
+  if (!TIPOS_VALIDOS.includes(tipo)) {
+    throw new ValidationError({ message: `tipo deve ser um de: ${TIPOS_VALIDOS.join(', ')}` });
   }
 
-  const origem = req.body?.origem ?? 'texto';
-  if (!ORIGENS_VALIDAS.includes(origem)) {
-    throw new ValidationError({ message: `origem deve ser um de: ${ORIGENS_VALIDAS.join(', ')}` });
+  const tags = parseTags(req.body?.tags);
+  const conteudoBruto = typeof req.body?.conteudo === 'string' ? req.body.conteudo.trim() : '';
+
+  if (tipo === 'texto' && !conteudoBruto) {
+    throw new ValidationError({ message: 'conteudo obrigatório pra tipo texto' });
   }
 
-  res.status(201).json(await inboxRepository.add(conteudo, origem));
+  const audioBlob = tipo === 'audio' ? parseBlob(req.body?.audio, 'audio') : undefined;
+  if (tipo === 'audio' && !audioBlob) {
+    throw new ValidationError({ message: 'audio (base64) obrigatório pra tipo audio' });
+  }
+
+  const imagemBlob = tipo === 'imagem' ? parseBlob(req.body?.imagem, 'imagem') : undefined;
+  if (tipo === 'imagem' && !imagemBlob) {
+    throw new ValidationError({ message: 'imagem (base64) obrigatória pra tipo imagem' });
+  }
+
+  const item = await inboxRepository.add({
+    tipo,
+    conteudo: conteudoBruto || null,
+    tags,
+    audioBlob,
+    imagemBlob,
+  });
+  res.status(201).json(item);
 });
 
 inboxRouter.patch('/:id', async (req, res) => {
@@ -31,16 +72,27 @@ inboxRouter.patch('/:id', async (req, res) => {
     throw new ValidationError({ message: 'id inválido' });
   }
 
-  const conteudo = typeof req.body?.conteudo === 'string' ? req.body.conteudo.trim() : '';
-  if (!conteudo) {
-    throw new ValidationError({ message: 'conteudo obrigatório' });
+  const temConteudo = typeof req.body?.conteudo === 'string';
+  const temTags = req.body?.tags !== undefined;
+  if (!temConteudo && !temTags) {
+    throw new ValidationError({ message: 'informe conteudo e/ou tags pra editar' });
   }
 
-  const item = await inboxRepository.update(id, conteudo);
-  if (!item) {
+  const conteudo = temConteudo ? req.body.conteudo.trim() : undefined;
+  if (temConteudo && !conteudo) {
+    throw new ValidationError({ message: 'conteudo não pode ficar vazio' });
+  }
+  const tags = temTags ? parseTags(req.body.tags) : undefined;
+
+  const existente = await inboxRepository.findById(id);
+  if (!existente) {
     throw new NotFoundError({ message: 'item não encontrado no inbox' });
   }
+  if (existente.status !== 'pendente') {
+    throw new ConflictError({ message: `item já está '${existente.status}', não pode mais ser editado` });
+  }
 
+  const item = await inboxRepository.update(id, { conteudo, tags });
   res.json(item);
 });
 
@@ -50,10 +102,14 @@ inboxRouter.delete('/:id', async (req, res) => {
     throw new ValidationError({ message: 'id inválido' });
   }
 
-  const removed = await inboxRepository.remove(id);
-  if (!removed) {
+  const existente = await inboxRepository.findById(id);
+  if (!existente) {
     throw new NotFoundError({ message: 'item não encontrado no inbox' });
   }
+  if (existente.status !== 'pendente') {
+    throw new ConflictError({ message: `item já está '${existente.status}', não pode mais ser excluído` });
+  }
 
+  await inboxRepository.remove(id);
   res.status(204).end();
 });

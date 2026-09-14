@@ -5,15 +5,17 @@
 > documento vivo — deve ser **atualizado**, não acumulado como changelog. A data no
 > topo de cada seção indica a última vez que aquilo mudou.
 
-_Última atualização: 2026-07-27_
+_Última atualização: 2026-09-13_
 
 ## Status atual — o que já está em produção
 
 - ✅ Login com Google (Google Identity Services + JWT em cookie httpOnly)
-- ✅ Captura de itens no inbox (criar, listar, editar, deletar)
+- ✅ Captura de itens no inbox — texto, áudio (gravado no navegador) ou foto,
+  cada um com tag(s) obrigatória(s). Listar/editar/excluir seguem existindo,
+  agora escopados a itens ainda `pendente` (ver schema revisado abaixo).
 - ✅ Banco Postgres via Neon (região São Paulo)
 - ✅ Tratamento de erros centralizado (classes de erro + middleware, estilo tabnews)
-- ✅ Testes de integração do back (vitest + supertest, Postgres via Docker, 12 testes)
+- ✅ Testes de integração do back (vitest + supertest, Postgres via Docker, 18 testes)
 - ✅ **Deploy em produção na Vercel** — dois projetos (back + front), validado
   end-to-end inclusive no celular:
   - Back: `https://jarvis-backend-seven-henna.vercel.app`
@@ -37,10 +39,14 @@ _Última atualização: 2026-07-27_
   por dependência externa (`services/auth.ts`, futuro `services/ai.ts`); padrão
   repository por entidade; tipos duplicados entre front/back até a duplicação incomodar
   de verdade (sem pacote compartilhado prematuro).
-- **Invocação de IA — decidido, mas ver ⚠️ abaixo:** Claude Code CLI headless
-  (`claude -p`, login por assinatura), não Agent SDK — pra não sair do plano pago e
-  cair em billing por API/token. Essa decisão está em tensão com o ambiente serverless
-  da Vercel; ver seção de pendência abaixo antes de implementar.
+- **Invocação de IA — resolvida em 13-14/09, ver ⚠️ antiga pendência abaixo:** não
+  mora mais neste repositório. `back/src/services/ai.ts` (nunca implementado, nenhuma
+  rota chegou a chamá-lo) foi deletado. A IA de verdade (transcrever áudio, interpretar
+  imagem, decidir GTD, escrever no vault) roda em `sync/`, um processo Python separado
+  no servidor onde a Atena mora, lendo/escrevendo o Neon direto (sem passar pela API
+  deste back) via `claude -p` autenticado por assinatura naquela máquina — resolve de
+  vez a tensão com o ambiente serverless da Vercel (não tem função serverless
+  guardando credencial de assinatura). Detalhe completo em `README.md` e `sync/sync.py`.
 
 ## O que aprendemos (não repetir)
 
@@ -75,60 +81,50 @@ _Última atualização: 2026-07-27_
   etc.) — a Dani quer abrir o vault em outra máquina e ver o mesmo estado/layout.
 - **Email pessoal em repos pessoais** — identidade git local ao repo
   (`user.email = danicaus.br@gmail.com`), diferente da global (email de trabalho).
+- **Uma peça travada não é licença pra tirar as peças vizinhas que já funcionam.**
+  `services/ai.ts` travado quase levou o `back/` inteiro (Express, OAuth, CRUD) junto
+  numa primeira tentativa de resolver — foi revertido no mesmo dia. Ver detalhe na
+  seção de pendência resolvida, logo abaixo.
 
-## ⚠️ Questão em aberto — resolver antes de começar a Fase atual
+## ⚠️ Questão em aberto — RESOLVIDA em 13-14/09/2026
 
-O arquivo `ia/Processamento assíncrono.md` (escrito com o Claude Web) propõe usar o
-**Agent SDK** pra chamar a IA dentro do padrão assíncrono/polling, e justifica a
-arquitetura orientada a eventos pelo timeout de função serverless da Vercel. Duas
-correções importantes, discutidas em 2026-07-27, antes de seguir:
+A pendência que existia aqui (escolha entre Agent SDK e `claude -p` pra invocar IA
+dentro deste repo, em tensão com o ambiente serverless da Vercel — credencial de
+assinatura do `claude -p` não sobrevive num ambiente sem disco persistente) foi
+resolvida **tirando a invocação de IA deste repositório por completo**, em vez de
+escolher entre as opções listadas antigamente aqui. A IA passou a rodar em `sync/`,
+processo à parte no servidor onde a Atena/vault já vivem — lá o `claude -p` já está
+autenticado por assinatura de forma estável (não é ambiente serverless), então o
+problema de credencial simplesmente não existe mais nesse desenho.
 
-**1. O motivo real da arquitetura orientada a eventos não é o timeout da Vercel.**
-Com Fluid Compute (padrão do nosso deploy), o limite de execução é 300s por padrão —
-uma chamada de IA processando um item cabe tranquilo nisso. O motivo de verdade é que
-`processar-dia` é uma **conversa com humano no meio**: a IA pergunta algo e a resposta
-pode demorar minutos ou horas (a Dani pode fechar o notebook no meio). Nenhuma
-requisição HTTP deveria ficar aberta esperando isso — é uma questão de natureza da
-interação, não uma limitação específica de hospedagem serverless. Isso **não muda a
-necessidade** de separar "iniciar processamento" de "esperar resposta" (a arquitetura
-de sessão + polling continua correta), só a razão registrada por trás dela.
+Isso também tornou obsoleto o padrão "sessão + polling dentro deste repo" descrito em
+`ia/Processamento assíncrono.md` — `sync/` faz seu próprio polling direto no Postgres
+(`status = 'pendente' → 'processando' → 'processada'`), sem precisar de uma tabela de
+sessão neste back nem de um painel de chat consumindo polling por aqui. A tabela
+`sessoes_processamento` foi removida do schema por causa disso. O documento
+`ia/Processamento assíncrono.md` fica só como registro histórico do raciocínio (não
+está mais desenhando o que vai ser construído).
 
-**2. Isso não resolve a escolha entre Agent SDK e `claude -p` — são problemas
-diferentes.** Mesmo com a arquitetura de eventos perfeita, cada passo (uma pergunta,
-uma resposta) ainda precisa chamar a IA de verdade em algum lugar:
-- `claude -p` **não é uma conexão aberta** — é uma chamada única (prompt entra,
-  resposta sai, processo termina), do tamanho de segundos, não de uma sessão de
-  terminal interativa. Em termos de **duração** ele cabe numa function da Vercel sem
-  problema.
-- O problema real é **autenticação e ambiente**: `claude -p` lê uma credencial de
-  login por assinatura salva em disco (criada num login interativo único, via
-  navegador). Funções serverless da Vercel não garantem disco persistente entre
-  invocações, e não tem como repetir aquele fluxo de login interativo dentro de uma
-  function automatizada. Ou seja, não é sobre a requisição travar — é sobre o
-  `claude -p` não ter como provar que é a assinatura da Dani rodando ali.
-- Embutir essa credencial no deploy (como um secret) seria possível tecnicamente, mas
-  fica em aberto se os termos de uso da Anthropic pra login por assinatura permitem
-  esse tipo de uso automatizado/headless em produção — **precisa verificar antes de
-  considerar esse caminho**, não presumir que é permitido.
-
-**Precisa decidir, antes de codar a Fase atual:** como a invocação de IA vai funcionar
-de verdade em produção. Caminhos possíveis a discutir (nenhum decidido ainda):
-- Aceitar o custo do Agent SDK (billing por token) só pra essa parte — encaixa limpo
-  no serverless, sem os problemas de credencial acima.
-- Rodar a parte de IA em outro lugar que não seja função serverless da Vercel (ex.: um
-  processo próprio com disco persistente), enquanto o resto do back continua na Vercel.
-- Verificar se embutir a credencial de assinatura no deploy é permitido pelos termos
-  da Anthropic e, se for, considerar esse caminho.
+**Houve uma correção de rumo no meio do caminho** (14/09): a primeira tentativa de
+resolver isso propôs tirar o `back/` inteiro (Express, OAuth, JWT, CRUD do inbox),
+achando que era tudo a mesma pendência. Foi longe demais — o problema real sempre foi
+só `services/ai.ts` nunca implementado, não o Express nem o login. `back/` continua
+existindo, com login Google e CRUD do inbox intactos. Lição: ao encontrar uma peça
+travada (`services/ai.ts`), checar o que exatamente depende dela antes de propor tirar
+a peça vizinha que já funciona e já é usada.
 
 ## Roadmap (fases, em ordem — vem do `ia/Processamento assíncrono.md`)
 
-**Concluído:** captura (local e produção), editar/deletar item do inbox.
+**Concluído:** captura multimodal (texto/áudio/foto + tags) em produção,
+editar/deletar item do inbox (escopado a `pendente`), `sync/` rodando no servidor da
+Atena consumindo o inbox.
 
-**Fase atual — validar a IA em produção:**
-1. Teste isolado: uma rota simples chamando a IA, medir tempo de resposta e ver se
-   roda no ambiente da Vercel — **bloqueado pela questão em aberto acima**.
-2. Implementar o padrão assíncrono (sessão em `sessoes_processamento` + polling do
-   front) — arquitetura completa descrita em `ia/Processamento assíncrono.md`.
+**Fase atual — validar o `sync/` em produção de verdade:**
+1. Rodar `sync/sync.py` contra captura real (não só teste manual) e conferir os três
+   casos (texto, áudio transcrito via whisper local, imagem interpretada pelo
+   `claude -p`) terminando em `processada` com `vault_path` certo.
+2. Decidir o que fica de pé de `ia/Processamento assíncrono.md` (o "painel de chat"
+   pra `processar-dia` ainda não tem lugar decidido — não é mais dentro deste back).
 
 **Próximas fases:**
 3. `processar-dia` de verdade (skill + painel de chat consumindo o polling)

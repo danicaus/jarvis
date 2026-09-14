@@ -1,10 +1,16 @@
-export type Origem = 'texto' | 'voz' | 'foto';
+export type Tipo = 'texto' | 'audio' | 'imagem';
+export type StatusInbox = 'pendente' | 'processando' | 'processada';
 
+// Sem os blobs — `list`/`findById` não trazem os binários de volta (ver
+// models/inbox.ts), só o suficiente pra exibir a lista e permitir editar/excluir.
 export interface InboxItem {
   id: number;
-  conteudo: string;
+  tipo: Tipo;
+  conteudo: string | null;
+  tags: string[];
   timestamp: string;
-  origem: Origem;
+  status: StatusInbox;
+  vault_path: string | null;
 }
 
 export interface User {

@@ -1,5 +1,12 @@
 import type { NextFunction, Request, Response } from 'express';
-import { ValidationError, UnauthorizedError, ForbiddenError, NotFoundError, InternalServerError } from '../infra/errors';
+import {
+  ValidationError,
+  UnauthorizedError,
+  ForbiddenError,
+  NotFoundError,
+  ConflictError,
+  InternalServerError,
+} from '../infra/errors';
 
 // Assinatura com 4 parâmetros é como o Express reconhece um error handler — não dá
 // pra remover nenhum, mesmo os não usados, senão isso vira um middleware normal e é
@@ -9,7 +16,8 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     err instanceof ValidationError ||
     err instanceof UnauthorizedError ||
     err instanceof ForbiddenError ||
-    err instanceof NotFoundError
+    err instanceof NotFoundError ||
+    err instanceof ConflictError
   ) {
     res.status(err.statusCode).json(err);
     return;

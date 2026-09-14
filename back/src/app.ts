@@ -12,7 +12,11 @@ export const app = express();
 
 app.use(cors({ origin: config.frontendOrigin, credentials: true }));
 app.use(cookieParser());
-app.use(express.json());
+// Limite bem acima do default (100kb) — POST /api/inbox manda áudio/imagem como
+// base64 dentro do JSON. O teto real não é esse limite, e sim o da própria Vercel
+// pra corpo de Serverless Function (~4.5MB) — o front já limita duração de
+// gravação e redimensiona imagem pra caber nisso; ver front/src/pages/Captura.tsx.
+app.use(express.json({ limit: '8mb' }));
 
 app.use('/health', healthRouter);
 app.use('/auth', authRouter);
