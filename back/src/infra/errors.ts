@@ -88,6 +88,27 @@ export class NotFoundError extends Error {
   }
 }
 
+export class ConflictError extends Error {
+  action: string;
+  statusCode: number;
+
+  constructor({ cause, message, action }: ErrorOptions = {}) {
+    super(message ?? 'O recurso não está mais no estado esperado para esta ação', { cause });
+    this.name = 'ConflictError';
+    this.action = action ?? 'Atualize a lista e tente novamente';
+    this.statusCode = 409;
+  }
+
+  toJSON() {
+    return {
+      name: this.name,
+      message: this.message,
+      action: this.action,
+      status_code: this.statusCode,
+    };
+  }
+}
+
 export class InternalServerError extends Error {
   action: string;
   statusCode: number;
