@@ -99,7 +99,7 @@ def transcrever_audio(blob: bytes) -> str:
         caminho = f.name
     try:
         resultado = subprocess.run(
-            ["whisper", caminho, "--model", "small", "--language", "Portuguese",
+            [os.path.expanduser("~/.local/bin/whisper"), caminho, "--model", "small", "--language", "Portuguese",
              "--output_format", "txt", "--output_dir", tempfile.gettempdir()],
             capture_output=True, text=True, timeout=300,
         )
