@@ -133,13 +133,21 @@ def processar_item(item, dry_run: bool) -> str | None:
         audio_path = os.path.join(ANEXOS_AUDIO, f"{item['id']}.wav")
         with open(audio_path, "wb") as f:
             f.write(bytes(item["audio_blob"]))
-        anexo_info = f"Áudio original salvo em: {audio_path}"
+        anexo_info = (
+            f"Áudio original salvo em: {audio_path}. Embuta com a sintaxe do "
+            f"Obsidian: ![[{os.path.basename(audio_path)}]] — com `!` na frente, "
+            f"só o nome do arquivo, sem a pasta (o Obsidian acha pelo nome e "
+            f"toca inline; caminho completo só cria link de texto, não embute)."
+        )
     elif tipo == "imagem" and item["imagem_blob"]:
         img_temp = salvar_imagem_temp(bytes(item["imagem_blob"]))
         anexo_info = (
             f"Imagem em: {img_temp} — leia com a ferramenta Read, descreva o "
             f"que tem nela, e copie pra Anexos/ do vault com nome "
-            f"AAAA-MM-DD-descrição.jpg antes de referenciar na nota."
+            f"AAAA-MM-DD-descrição.jpg antes de referenciar na nota. Embuta com "
+            f"a sintaxe do Obsidian: ![[AAAA-MM-DD-descrição.jpg]] — com `!` na "
+            f"frente, só o nome do arquivo, sem a pasta (caminho completo só "
+            f"cria link de texto, não embute a imagem de verdade)."
         )
 
     prompt = f"""Um item chegou pela captura remota (app Jarvis), pendente de registro no vault.
