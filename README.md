@@ -7,43 +7,46 @@ rodando num servidor à parte — não faz parte deste repositório.
 
 ## Arquitetura (revisada em 13-14/set/2026)
 
-Este repositório cuida só da **captura** — a inteligência (processar,
-decidir o que vira tarefa, escrever no vault) mora fora, do lado do
-servidor onde a Atena roda.
+**Correção de rumo (14/09):** a primeira versão desta revisão tinha proposto
+tirar o `back/` inteiro (Express, OAuth, JWT, CRUD do inbox). Isso foi longe
+demais — o problema real nunca foi o Express nem o login, foi só
+`services/ai.ts` nunca ter sido implementado (e nem chegar a ser chamado por
+nenhuma rota). `back/` **continua existindo**: login Google, JWT e o CRUD do
+inbox (listar/editar/excluir) seguem valendo — inclusive editar/excluir é
+uma funcionalidade real que já foi usada e vale manter, escopada a itens
+ainda **não processados** (`status = 'pendente'`).
+
+O que de fato muda: a IA (transcrever, decidir GTD, escrever no vault) sai
+deste repositório e passa a rodar external, num processo (`sync/`) que lê o
+Neon direto — sem passar pela API deste back.
 
 ```
-[Front Vite+React, celular/navegador]
-   → grava texto/áudio/foto + tag
-   → POST pra uma Vercel Serverless Function (token secreto, não login)
-        - grava no Neon (tabela `inbox`)
-   ← confirma "salvo"
+[Front Vite+React, celular/navegador — login Google, como já era]
+   → captura texto/áudio/foto + tag(s)
+   → back/ (Express, na Vercel) grava no Neon
+   → back/ também serve listar/editar/excluir, só p/ status='pendente'
 
-[sync/ — roda no servidor separado, fora deste deploy]
-   → lê o Neon periodicamente (status='pendente')
-   → transcreve áudio, interpreta imagem via claude -p
-   → grava no life-vault, comita
-   → marca status='processada', limpa os blobs
+[sync/ — roda no servidor da Atena, fora deste deploy]
+   → lê o Neon direto (mesma DATABASE_URL), sem passar pelo back/
+   → marca status='processando' ao pegar um item (evita disputa com
+     edição/exclusão feita ao mesmo tempo pelo front)
+   → transcreve áudio, interpreta imagem via claude -p, grava no vault
+   → marca status='processada', preenche vault_path, limpa os blobs
 ```
+
+`back/` e `sync/` **compartilham o mesmo Postgres, sem se chamar um ao
+outro** — cada lado só lê/escreve linhas, na fase que lhe cabe.
 
 ## Estrutura
 
 - `front/` — UI em Vite + React + TypeScript. Três formas de captura (texto,
-  áudio, foto) + tag antes de salvar.
-- `front/api/` *(a criar)* — Vercel Serverless Function única, valida um
-  token secreto (env var) e grava no Neon. Substitui o antigo `back/`
-  Express — não tem mais login de usuário (Google OAuth/JWT saíram).
-- `sync/` — script Python que roda **no servidor da Atena**, não faz parte
-  do deploy do front. Lê o Neon, processa, escreve no vault. Ver
-  `sync/sync.py` e `sync/.env.example`.
-
-## O que saiu (13-14/set/2026)
-
-- `back/` inteiro (Express, rotas de auth/inbox, middleware JWT) — a
-  `services/ai.ts` de lá nunca chegou a ser implementada nem chamada; a
-  função de "conversar com a IA" mudou de lugar e de forma (virou o
-  `sync/`, do lado do servidor, chamando `claude -p` direto).
-- Login Google OAuth / JWT — segurança da escrita no Neon virou um token
-  secreto único, não conta de usuário (uso é de uma pessoa só).
+  áudio, foto) + tag(s) antes de salvar. Continua com login Google.
+- `back/` — API Express, como já era: auth Google/JWT, CRUD do inbox. Só
+  muda o schema (tags, status com 3 valores, vault_path) e a listagem, que
+  agora filtra por padrão pra `status = 'pendente'`.
+- `sync/` — script Python que roda **no servidor da Atena**, fora do deploy
+  deste repo. Lê o Neon, processa, escreve no vault. Ver `sync/sync.py` e
+  `sync/.env.example`.
 
 ## Schema do Neon
 
@@ -54,20 +57,28 @@ CREATE TABLE inbox (
   conteudo      TEXT,
   audio_blob    BYTEA,
   imagem_blob   BYTEA,
-  tag           TEXT NOT NULL,
+  tags          TEXT[] NOT NULL DEFAULT '{}',
   timestamp     TIMESTAMPTZ NOT NULL DEFAULT now(),
-  status        TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente', 'processada')),
+  status        TEXT NOT NULL DEFAULT 'pendente'
+                CHECK (status IN ('pendente', 'processando', 'processada')),
   vault_path    TEXT
 );
 ```
 
+`status = 'processando'` existe só pra evitar corrida: o `sync/` marca isso
+assim que pega um item pra processar, e o `back/` recusa editar/excluir
+qualquer item que não esteja mais em `pendente`.
+
 ## Rodando localmente
 
+Cada pasta (`back/`, `front/`) tem seu próprio `package.json`:
+
 ```bash
+cd back && npm install && npm run dev
 cd front && npm install && npm run dev
 ```
 
-Veja `front/.env.example` pras variáveis necessárias (URL da function, token).
+Veja `back/.env.example` e `front/.env.example` pras variáveis de ambiente.
 
 Pro `sync/`, ver `sync/.env.example` — roda só no servidor onde o vault e o
 `claude -p` (autenticado com assinatura, não API key) já existem.

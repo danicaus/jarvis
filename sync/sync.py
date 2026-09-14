@@ -2,26 +2,32 @@
 """
 sync.py — lê o inbox pendente no Neon, processa e grava no life-vault.
 
-Roda no servidor onde a Atena mora (não no front, não precisa do back
-Express antigo). Um item por vez, sem manter estado entre execuções além
-do que já está no próprio Neon (`status`).
+Roda no servidor onde a Atena mora — separado do `back/` (Express), que
+continua existindo pro CRUD/login do front. Este script só lê/escreve o
+mesmo Postgres, direto, sem passar pela API do back. Sem manter estado
+entre execuções além do que já está no próprio Neon (`status`).
 
 Pipeline por item:
-  1. Busca linhas com status='pendente'.
+  1. Busca linhas com status='pendente' e já marca como 'processando' na
+     mesma query atômica (SELECT FOR UPDATE SKIP LOCKED) — é o sinal pro
+     back/ recusar edição/exclusão desse item enquanto o sync mexe nele.
   2. Se tipo == 'audio': transcreve (via `whisper` CLI, local — precisa
      estar instalado; ver requirements.txt).
   3. Se tipo == 'imagem': salva o blob num arquivo temporário — a
      interpretação em si acontece dentro do prompt do `claude -p` (ele lê
      imagem nativamente via ferramenta Read, não precisa de lib separada).
-  4. Monta um prompt descrevendo o item (conteúdo/transcrição, tag,
+  4. Monta um prompt descrevendo o item (conteúdo/transcrição, tags,
      timestamp, caminho de anexo se houver) e roda `claude -p`, dando
      acesso a Bash/Read/Edit — ele decide o registro certo no vault
      (reaproveitando `~/.claude/scripts/diario-log.py`) e **comita**
      (diferente do fluxo manual "manda-pra-atena": aqui não tem sessão
      interativa acompanhando, então cada rodada do sync fecha o próprio
      ciclo sozinha, pra não acumular estado sem dono).
-  5. Marca a linha como 'processada', preenche `vault_path`, limpa os
-     campos de blob (o binário já não precisa viver em duas cópias).
+  5. Sucesso: marca 'processada', preenche `vault_path`, limpa os blobs
+     (o binário já não precisa viver em duas cópias). Falha: volta pra
+     'pendente' — vai tentar de novo na próxima rodada (sem limite de
+     tentativas ainda; se um item travar sempre, fica retentando pra
+     sempre — não resolvido nesta primeira versão).
 
 Uso:
   python3 sync.py [--dry-run] [--once] [--limit N]
@@ -57,14 +63,31 @@ def conectar():
     return psycopg2.connect(DATABASE_URL)
 
 
-def buscar_pendentes(conn, limite):
+def buscar_e_travar_pendentes(conn, limite):
+    """Atômico: pega até `limite` itens 'pendente' e já marca 'processando'
+    na mesma transação (SKIP LOCKED evita esbarrar em outra execução
+    concorrente do próprio sync, embora hoje ele rode um de cada vez)."""
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute(
-            "SELECT id, tipo, conteudo, audio_blob, imagem_blob, tag, timestamp "
-            "FROM inbox WHERE status = 'pendente' ORDER BY id ASC LIMIT %s",
+            """
+            UPDATE inbox SET status = 'processando'
+            WHERE id IN (
+                SELECT id FROM inbox WHERE status = 'pendente'
+                ORDER BY id ASC LIMIT %s FOR UPDATE SKIP LOCKED
+            )
+            RETURNING id, tipo, conteudo, audio_blob, imagem_blob, tags, timestamp
+            """,
             (limite,),
         )
-        return cur.fetchall()
+        itens = cur.fetchall()
+    conn.commit()
+    return itens
+
+
+def voltar_para_pendente(conn, item_id):
+    with conn.cursor() as cur:
+        cur.execute("UPDATE inbox SET status = 'pendente' WHERE id = %s", (item_id,))
+    conn.commit()
 
 
 def transcrever_audio(blob: bytes) -> str:
@@ -99,7 +122,7 @@ def processar_item(item, dry_run: bool) -> str | None:
     ele (lido da última linha do stdout, por convenção do prompt), ou None
     se falhar."""
     tipo = item["tipo"]
-    tag = item["tag"]
+    tags = ", ".join(item["tags"] or [])
     timestamp = item["timestamp"].isoformat()
     anexo_info = ""
 
@@ -122,7 +145,7 @@ def processar_item(item, dry_run: bool) -> str | None:
     prompt = f"""Um item chegou pela captura remota (app Jarvis), pendente de registro no vault.
 
 Tipo: {tipo}
-Tag(s): {tag}
+Tag(s): {tags}
 Timestamp da captura: {timestamp}
 Conteúdo: {conteudo or "(vazio — ver anexo)"}
 {anexo_info}
@@ -181,21 +204,34 @@ def main():
     args = ap.parse_args()
 
     conn = conectar()
-    itens = buscar_pendentes(conn, args.limit)
+
+    if args.dry_run:
+        # não muda status nenhum — só olha o que tá pendente
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                "SELECT id, tipo, conteudo, audio_blob, imagem_blob, tags, timestamp "
+                "FROM inbox WHERE status = 'pendente' ORDER BY id ASC LIMIT %s",
+                (args.limit,),
+            )
+            itens = cur.fetchall()
+    else:
+        itens = buscar_e_travar_pendentes(conn, args.limit)
+
     if not itens:
         print("nada pendente.")
         return 0
 
     for item in itens:
-        print(f"processando item {item['id']} ({item['tipo']}, tag={item['tag']})...")
+        print(f"processando item {item['id']} ({item['tipo']}, tags={item['tags']})...")
         vault_path = processar_item(item, args.dry_run)
-        if vault_path and not args.dry_run:
+        if args.dry_run:
+            print("  -> [dry-run] nada gravado no Neon")
+        elif vault_path:
             marcar_processada(conn, item["id"], vault_path)
             print(f"  -> ok, {vault_path}")
-        elif args.dry_run:
-            print("  -> [dry-run] nada gravado no Neon")
         else:
-            print(f"  -> falhou, item {item['id']} continua pendente")
+            voltar_para_pendente(conn, item["id"])
+            print(f"  -> falhou, item {item['id']} voltou pra pendente")
 
     conn.close()
     return 0
