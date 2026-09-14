@@ -18,3 +18,38 @@ textarea {
   min-height: 6rem;
   font: inherit;
 }
+
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.tab {
+  text-transform: capitalize;
+}
+
+.tab-ativa {
+  font-weight: bold;
+  text-decoration: underline;
+}
+
+.tag-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.75rem 0;
+}
+
+.chip {
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  background: transparent;
+  padding: 0.25rem 0.75rem;
+  font: inherit;
+}
+
+.chip-ativa {
+  background: currentColor;
+  color: Canvas;
+}
