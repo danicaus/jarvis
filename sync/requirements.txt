@@ -1,0 +1,10 @@
+# psycopg2 é instalado via apt (sudo apt install python3-psycopg2), não por
+# aqui — evita o bloqueio "externally-managed-environment" do Python do
+# sistema (PEP 668). Deixado comentado só como registro da dependência.
+# psycopg2-binary
+
+# Transcrição de áudio — sem pacote apt equivalente. Precisa de pipx ou venv
+# (ambos pedem sudo pra instalar a ferramenta em si, uma vez só):
+#   sudo apt install -y pipx
+#   pipx install openai-whisper
+openai-whisper
