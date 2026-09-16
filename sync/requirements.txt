@@ -3,8 +3,13 @@
 # sistema (PEP 668). Deixado comentado só como registro da dependência.
 # psycopg2-binary
 
-# Transcrição de áudio — sem pacote apt equivalente. Precisa de pipx ou venv
-# (ambos pedem sudo pra instalar a ferramenta em si, uma vez só):
-#   sudo apt install -y pipx
-#   pipx install openai-whisper
-openai-whisper
+# Transcrição de áudio — faster-whisper, num venv separado (sync/.venv),
+# não no Python de sistema. Setup (uma vez só, sem sudo):
+#   python3 -m venv sync/.venv
+#   sync/.venv/bin/pip install faster-whisper
+#
+# Trocado do `openai-whisper` (via pipx) em 16/set/2026: mesmo modelo
+# "small", mas ~5x menos RAM de pico (770MB vs. o servidor de 3,8GB ficar
+# sem memória) e bem mais rápido, rodando via CTranslate2/int8 em vez do
+# pacote de referência da OpenAI. "medium" foi testado e descartado — ~2GB
+# de pico, sem ganho de qualidade consistente.

@@ -11,8 +11,10 @@ Pipeline por item:
   1. Busca linhas com status='pendente' e já marca como 'processando' na
      mesma query atômica (SELECT FOR UPDATE SKIP LOCKED) — é o sinal pro
      back/ recusar edição/exclusão desse item enquanto o sync mexe nele.
-  2. Se tipo == 'audio': transcreve (via `whisper` CLI, local — precisa
-     estar instalado; ver requirements.txt).
+  2. Se tipo == 'audio': transcreve via `faster-whisper` (local, modelo
+     "small" int8 — ver `transcrever.py` e requirements.txt). Roda como
+     subprocesso do venv de `sync/` (`sync/.venv`), separado do Python de
+     sistema que executa este arquivo.
   3. Se tipo == 'imagem': salva o blob num arquivo temporário — a
      interpretação em si acontece dentro do prompt do `claude -p` (ele lê
      imagem nativamente via ferramenta Read, não precisa de lib separada).
@@ -42,7 +44,6 @@ import os
 import subprocess
 import sys
 import tempfile
-from pathlib import Path
 
 try:
     import psycopg2
@@ -90,23 +91,24 @@ def voltar_para_pendente(conn, item_id):
     conn.commit()
 
 
+TRANSCREVER_PY = os.path.join(os.path.dirname(os.path.abspath(__file__)), "transcrever.py")
+VENV_PYTHON = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".venv", "bin", "python")
+
+
 def transcrever_audio(blob: bytes) -> str:
-    """Escreve o blob num arquivo temporário e chama `whisper` local.
-    Requer o pacote instalado (ver sync/requirements.txt) — ainda não
-    instalado nesta máquina no momento em que este script foi escrito."""
+    """Escreve o blob num arquivo temporário e chama `transcrever.py`
+    (faster-whisper) dentro do venv de sync/ — ver requirements.txt."""
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
         f.write(blob)
         caminho = f.name
     try:
         resultado = subprocess.run(
-            [os.path.expanduser("~/.local/bin/whisper"), caminho, "--model", "small", "--language", "Portuguese",
-             "--output_format", "txt", "--output_dir", tempfile.gettempdir()],
-            capture_output=True, text=True, timeout=600,  # "medium" é mais lento em CPU
+            [VENV_PYTHON, TRANSCREVER_PY, caminho],
+            capture_output=True, text=True, timeout=300,
         )
         if resultado.returncode != 0:
-            raise RuntimeError(f"whisper falhou: {resultado.stderr}")
-        txt_path = Path(tempfile.gettempdir()) / (Path(caminho).stem + ".txt")
-        return txt_path.read_text(encoding="utf-8").strip()
+            raise RuntimeError(f"transcrever.py falhou: {resultado.stderr}")
+        return resultado.stdout.strip()
     finally:
         os.unlink(caminho)
 
