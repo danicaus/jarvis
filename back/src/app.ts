@@ -5,6 +5,7 @@ import { config } from './config';
 import { healthRouter } from './routes/health';
 import { authRouter } from './routes/auth';
 import { inboxRouter } from './routes/inbox';
+import { tagsRouter } from './routes/tags';
 import { requireAuth } from './middleware/auth';
 import { errorHandler } from './middleware/errorHandler';
 
@@ -21,6 +22,7 @@ app.use(express.json({ limit: '8mb' }));
 app.use('/health', healthRouter);
 app.use('/auth', authRouter);
 app.use('/api/inbox', requireAuth, inboxRouter);
+app.use('/api/tags', requireAuth, tagsRouter);
 
 // Precisa ser o último app.use — Express só reconhece como error handler pela posição
 // (depois de todas as rotas) e pela assinatura de 4 parâmetros.

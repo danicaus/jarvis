@@ -21,3 +21,15 @@ CREATE TABLE IF NOT EXISTS inbox (
   status TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente', 'processando', 'processada')),
   vault_path TEXT
 );
+
+-- `inbox.tags` continua um TEXT[] livre (o `sync/` não precisa de FK pra
+-- escrever). Esta tabela é só o catálogo de nomes que o front oferece pra
+-- escolher — renomear aqui propaga pros itens existentes (ver models/tags.ts).
+CREATE TABLE IF NOT EXISTS tags (
+  id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  nome TEXT NOT NULL UNIQUE,
+  criado_em TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now())
+);
+
+INSERT INTO tags (nome) VALUES ('pessoal'), ('trabalho'), ('ideia'), ('compra'), ('saúde')
+ON CONFLICT (nome) DO NOTHING;

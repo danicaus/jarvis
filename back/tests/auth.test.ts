@@ -62,3 +62,11 @@ describe('GET /auth/me', () => {
     expect(response.body.email).toBe('teste@example.com');
   });
 });
+
+describe('POST /auth/logout', () => {
+  it('limpa o cookie de sessão', async () => {
+    const response = await request(app).post('/auth/logout');
+    expect(response.status).toBe(204);
+    expect(response.headers['set-cookie']?.[0]).toMatch(/^token=;/);
+  });
+});

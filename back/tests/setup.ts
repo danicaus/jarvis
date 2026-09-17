@@ -19,7 +19,8 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  await db.query('TRUNCATE inbox, users RESTART IDENTITY CASCADE');
+  await db.query('TRUNCATE inbox, tags, users RESTART IDENTITY CASCADE');
+  await ensureSchema(); // reaplica o schema.sql — reseeda as tags padrão truncadas acima
 });
 
 afterAll(async () => {

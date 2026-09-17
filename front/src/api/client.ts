@@ -22,7 +22,7 @@ export type NovoItem =
   | { tipo: 'audio'; audio: string; conteudo?: string; tags: string[] }
   | { tipo: 'imagem'; imagem: string; conteudo?: string; tags: string[] };
 
-interface Me {
+export interface Me {
   email: string;
   name: string;
 }
@@ -71,6 +71,10 @@ export function loginWithGoogle(idToken: string): Promise<Me> {
   });
 }
 
+export function logout(): Promise<void> {
+  return request('/auth/logout', { method: 'POST' });
+}
+
 export function getInbox(): Promise<InboxItem[]> {
   return request('/api/inbox');
 }
@@ -94,4 +98,25 @@ export function updateInboxItem(
 
 export function deleteInboxItem(id: number): Promise<void> {
   return request(`/api/inbox/${id}`, { method: 'DELETE' });
+}
+
+export interface Tag {
+  id: number;
+  nome: string;
+}
+
+export function getTags(): Promise<Tag[]> {
+  return request('/api/tags');
+}
+
+export function addTag(nome: string): Promise<Tag> {
+  return request('/api/tags', { method: 'POST', body: JSON.stringify({ nome }) });
+}
+
+export function renameTag(id: number, nome: string): Promise<Tag> {
+  return request(`/api/tags/${id}`, { method: 'PATCH', body: JSON.stringify({ nome }) });
+}
+
+export function deleteTag(id: number): Promise<void> {
+  return request(`/api/tags/${id}`, { method: 'DELETE' });
 }

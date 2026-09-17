@@ -13,6 +13,12 @@ export interface InboxItem {
   vault_path: string | null;
 }
 
+export interface Tag {
+  id: number;
+  nome: string;
+  criado_em: string;
+}
+
 export interface User {
   id: number;
   email: string;

@@ -37,6 +37,15 @@ authRouter.post('/google', async (req, res) => {
   res.json({ email: user.email, name: user.name });
 });
 
+authRouter.post('/logout', (_req, res) => {
+  res.clearCookie('token', {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+  });
+  res.status(204).end();
+});
+
 authRouter.get('/me', requireAuth, async (req, res) => {
   const user = await userModel.findById(req.userId!);
   if (!user) {

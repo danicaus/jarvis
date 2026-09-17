@@ -1,21 +1,28 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { Pencil, Settings, Trash2 } from 'lucide-react';
 import {
   addInboxItem,
-  deleteInboxItem,
-  getInbox,
-  updateInboxItem,
+  addTag,
   ApiError,
+  deleteInboxItem,
+  deleteTag,
+  getInbox,
+  getTags,
+  renameTag,
+  updateInboxItem,
   type InboxItem,
+  type NovoItem,
+  type Tag,
 } from '../api/client';
-
-// Lista fixa, não campo livre — editar aqui se o conjunto de tags mudar.
-const TAGS_DISPONIVEIS = ['pessoal', 'trabalho', 'ideia', 'compra', 'saúde'];
-
-const DURACAO_MAX_AUDIO_S = 60;
-const IMAGEM_MAX_DIMENSAO_PX = 1600;
-const IMAGEM_QUALIDADE = 0.8;
+import { DURACAO_MAX_AUDIO_S, IMAGEM_MAX_DIMENSAO_PX, IMAGEM_QUALIDADE } from '../constants';
+import { formatarDataHora, LABEL_TIPO } from '../format';
+import { Configuracoes } from './Configuracoes';
+import { ItemDetalhe } from './ItemDetalhe';
 
 type Modo = 'texto' | 'audio' | 'imagem';
+
+const ALTURAS_NIVEL_AUDIO = [30, 62, 44, 88, 54, 100, 38, 70, 26, 58, 34, 76];
+const BARRAS_ATIVAS_AUDIO = new Set([3, 5]);
 
 function blobParaBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -61,15 +68,17 @@ function escolherMimeTypeAudio(): string | undefined {
 }
 
 function TagChips({
+  opcoes,
   selecionadas,
   onToggle,
 }: {
+  opcoes: string[];
   selecionadas: string[];
   onToggle: (tag: string) => void;
 }) {
   return (
     <div className="tag-chips" role="group" aria-label="Tags">
-      {TAGS_DISPONIVEIS.map((tag) => (
+      {opcoes.map((tag) => (
         <button
           key={tag}
           type="button"
@@ -84,15 +93,20 @@ function TagChips({
   );
 }
 
-const ICONE_TIPO: Record<InboxItem['tipo'], string> = {
-  texto: '📝',
-  audio: '🎤',
-  imagem: '📷',
-};
+type Tela = 'lista' | 'detalhe' | 'config';
 
-export function Captura() {
+interface CapturaProps {
+  email: string;
+  onSair: () => void;
+}
+
+export function Captura({ email, onSair }: CapturaProps) {
+  const [tela, setTela] = useState<Tela>('lista');
+  const [itemDetalheId, setItemDetalheId] = useState<number | null>(null);
+
   const [itens, setItens] = useState<InboxItem[]>([]);
   const [erro, setErro] = useState<string | null>(null);
+  const [tags, setTags] = useState<Tag[]>([]);
 
   const [modo, setModo] = useState<Modo>('texto');
   const [texto, setTexto] = useState('');
@@ -115,7 +129,23 @@ export function Captura() {
 
   useEffect(() => {
     getInbox().then(setItens);
+    getTags().then(setTags);
   }, []);
+
+  async function adicionarTag(nome: string) {
+    const tag = await addTag(nome);
+    setTags((atual) => [...atual, tag]);
+  }
+
+  async function renomearTag(id: number, nome: string) {
+    const tag = await renameTag(id, nome);
+    setTags((atual) => atual.map((t) => (t.id === id ? tag : t)));
+  }
+
+  async function removerTag(id: number) {
+    await deleteTag(id);
+    setTags((atual) => atual.filter((t) => t.id !== id));
+  }
 
   // Solta a stream do microfone e o timer se o componente desmontar no meio de
   // uma gravação — evita deixar o indicador de "gravando" ligado pra sempre.
@@ -220,29 +250,28 @@ export function Captura() {
     setErro(null);
 
     try {
-      let novoItem: InboxItem;
+      let item: NovoItem;
       if (modo === 'texto') {
-        novoItem = await addInboxItem({ tipo: 'texto', conteudo: texto.trim(), tags: tagsSelecionadas });
+        item = { tipo: 'texto', conteudo: texto.trim(), tags: tagsSelecionadas };
       } else if (modo === 'audio' && audioBlob) {
-        const audio = await blobParaBase64(audioBlob);
-        novoItem = await addInboxItem({
+        item = {
           tipo: 'audio',
-          audio,
+          audio: await blobParaBase64(audioBlob),
           conteudo: legenda.trim() || undefined,
           tags: tagsSelecionadas,
-        });
+        };
       } else if (modo === 'imagem' && imagemBlob) {
-        const imagem = await blobParaBase64(imagemBlob);
-        novoItem = await addInboxItem({
+        item = {
           tipo: 'imagem',
-          imagem,
+          imagem: await blobParaBase64(imagemBlob),
           conteudo: legenda.trim() || undefined,
           tags: tagsSelecionadas,
-        });
+        };
       } else {
         return;
       }
 
+      const novoItem = await addInboxItem(item);
       setItens((atual) => [novoItem, ...atual]);
       limparCapturaAtual();
     } catch (err) {
@@ -276,7 +305,7 @@ export function Captura() {
     }
   }
 
-  async function excluir(id: number) {
+  async function excluirItem(id: number) {
     setErro(null);
     try {
       await deleteInboxItem(id);
@@ -297,126 +326,266 @@ export function Captura() {
     setErro(err instanceof Error ? err.message : 'Erro inesperado.');
   }
 
+  if (tela === 'config') {
+    return (
+      <Configuracoes
+        email={email}
+        tags={tags}
+        onAdicionarTag={adicionarTag}
+        onRenomearTag={renomearTag}
+        onRemoverTag={removerTag}
+        onVoltar={() => setTela('lista')}
+        onSair={onSair}
+      />
+    );
+  }
+
+  if (tela === 'detalhe') {
+    const item = itens.find((atual) => atual.id === itemDetalheId);
+    if (item) {
+      return (
+        <ItemDetalhe
+          item={item}
+          onVoltar={() => setTela('lista')}
+          onEditar={() => {
+            iniciarEdicao(item);
+            setTela('lista');
+          }}
+          onExcluir={async () => {
+            await excluirItem(item.id);
+            setTela('lista');
+          }}
+        />
+      );
+    }
+  }
+
   return (
     <div>
-      <h1>Captura</h1>
+      <header className="captura-header">
+        <div className="captura-header-top">
+          <span className="brand">Jarvis</span>
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={() => setTela('config')}
+            aria-label="Configurações"
+          >
+            <Settings size={20} strokeWidth={2} />
+          </button>
+        </div>
+        <h2>Captura</h2>
+      </header>
 
-      {erro && <p role="alert">{erro}</p>}
+      {erro && (
+        <p role="alert" className="alert">
+          {erro}
+        </p>
+      )}
 
       <form onSubmit={handleSubmit}>
-        <div className="tabs" role="tablist" aria-label="Forma de captura">
-          {(['texto', 'audio', 'imagem'] as const).map((opcao) => (
+        <div className="mode-tabs" role="tablist" aria-label="Forma de captura">
+          {(['audio', 'texto', 'imagem'] as const).map((opcao) => (
             <button
               key={opcao}
               type="button"
               role="tab"
               aria-selected={modo === opcao}
-              className={modo === opcao ? 'tab tab-ativa' : 'tab'}
+              className={modo === opcao ? 'mode-tab mode-tab-ativa' : 'mode-tab'}
               onClick={() => setModo(opcao)}
             >
-              {ICONE_TIPO[opcao]} {opcao}
+              {LABEL_TIPO[opcao]}
             </button>
           ))}
         </div>
 
-        {modo === 'texto' && (
-          <textarea
-            value={texto}
-            onChange={(event) => setTexto(event.target.value)}
-            placeholder="O que você quer capturar?"
+        <div className="capture-block">
+          {modo === 'texto' && (
+            <textarea
+              className="capture-textarea"
+              value={texto}
+              onChange={(event) => setTexto(event.target.value)}
+              placeholder="O que você quer capturar?"
+            />
+          )}
+
+          {modo === 'audio' && (
+            <div>
+              {!gravando && !audioBlob && (
+                <button type="button" className="btn-secundario" onClick={iniciarGravacao}>
+                  Gravar
+                </button>
+              )}
+              {gravando && (
+                <div>
+                  <button type="button" className="btn-secundario" onClick={pararGravacao}>
+                    Parar
+                  </button>
+                  <div className="audio-counter" style={{ marginTop: 10 }}>
+                    {String(Math.floor(audioSegundos / 60)).padStart(2, '0')}:
+                    {String(audioSegundos % 60).padStart(2, '0')} / 01:00
+                  </div>
+                  <div className="audio-levels" aria-hidden="true">
+                    {ALTURAS_NIVEL_AUDIO.map((altura, indice) => (
+                      <span
+                        key={indice}
+                        className={BARRAS_ATIVAS_AUDIO.has(indice) ? 'ativa' : undefined}
+                        style={{ height: `${altura}%` }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+              {!gravando && audioBlob && (
+                <div className="audio-player">
+                  <audio controls src={URL.createObjectURL(audioBlob)} />
+                  <button type="button" className="btn-secundario" onClick={() => setAudioBlob(null)}>
+                    Regravar
+                  </button>
+                </div>
+              )}
+              <textarea
+                className="capture-textarea capture-textarea-legenda"
+                value={legenda}
+                onChange={(event) => setLegenda(event.target.value)}
+                placeholder="Legenda do áudio (opcional)"
+              />
+            </div>
+          )}
+
+          {modo === 'imagem' && (
+            <div>
+              {!imagemPreviewUrl && (
+                <label className="photo-preview photo-picker">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={onSelecionarImagem}
+                    hidden
+                  />
+                  <span className="photo-preview-label">Prévia · 1600 px máx.</span>
+                </label>
+              )}
+              {imagemPreviewUrl && (
+                <div>
+                  <div className="photo-preview">
+                    <img src={imagemPreviewUrl} alt="Prévia da foto capturada" />
+                    <span className="photo-preview-label">Prévia · 1600 px máx.</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-secundario"
+                    style={{ marginTop: 12 }}
+                    onClick={removerImagem}
+                  >
+                    Remover
+                  </button>
+                </div>
+              )}
+              <textarea
+                className="capture-textarea capture-textarea-legenda"
+                value={legenda}
+                onChange={(event) => setLegenda(event.target.value)}
+                placeholder="Legenda da foto (opcional)"
+              />
+            </div>
+          )}
+
+          <TagChips
+            opcoes={tags.map((tag) => tag.nome)}
+            selecionadas={tagsSelecionadas}
+            onToggle={(tag) => alternarTag(tagsSelecionadas, setTagsSelecionadas, tag)}
           />
-        )}
 
-        {modo === 'audio' && (
-          <div>
-            {!gravando && !audioBlob && (
-              <button type="button" onClick={iniciarGravacao}>
-                🎤 Gravar
-              </button>
-            )}
-            {gravando && (
-              <button type="button" onClick={pararGravacao}>
-                ⏹ Parar ({audioSegundos}s / {DURACAO_MAX_AUDIO_S}s)
-              </button>
-            )}
-            {!gravando && audioBlob && (
-              <div>
-                <audio controls src={URL.createObjectURL(audioBlob)} />
-                <button type="button" onClick={() => setAudioBlob(null)}>
-                  Regravar
-                </button>
-              </div>
-            )}
-            <textarea
-              value={legenda}
-              onChange={(event) => setLegenda(event.target.value)}
-              placeholder="Legenda (opcional)"
-            />
-          </div>
-        )}
-
-        {modo === 'imagem' && (
-          <div>
-            {!imagemPreviewUrl && (
-              <input type="file" accept="image/*" capture="environment" onChange={onSelecionarImagem} />
-            )}
-            {imagemPreviewUrl && (
-              <div>
-                <img src={imagemPreviewUrl} alt="Prévia da foto capturada" style={{ maxWidth: '100%' }} />
-                <button type="button" onClick={removerImagem}>
-                  Remover
-                </button>
-              </div>
-            )}
-            <textarea
-              value={legenda}
-              onChange={(event) => setLegenda(event.target.value)}
-              placeholder="Legenda (opcional)"
-            />
-          </div>
-        )}
-
-        <TagChips
-          selecionadas={tagsSelecionadas}
-          onToggle={(tag) => alternarTag(tagsSelecionadas, setTagsSelecionadas, tag)}
-        />
-
-        <button type="submit" disabled={!podeSubmeter}>
-          Capturar
-        </button>
+          <button type="submit" className="btn-capturar" disabled={!podeSubmeter}>
+            Capturar
+          </button>
+        </div>
       </form>
 
-      <ul>
-        {itens.map((item) =>
-          editandoId === item.id ? (
-            <li key={item.id}>
-              <textarea value={rascunho} onChange={(event) => setRascunho(event.target.value)} />
-              <TagChips
-                selecionadas={rascunhoTags}
-                onToggle={(tag) => alternarTag(rascunhoTags, setRascunhoTags, tag)}
-              />
-              <button type="button" disabled={rascunhoTags.length === 0} onClick={() => salvarEdicao(item.id)}>
+      <div className="list-header">
+        <span className="list-header-title">Inbox pendente</span>
+        <span className="list-header-count">
+          {itens.length} {itens.length === 1 ? 'item' : 'itens'}
+        </span>
+      </div>
+
+      {itens.length === 0 && <div className="inbox-vazio">Inbox vazio — nada pendente.</div>}
+
+      {itens.map((item) =>
+        editandoId === item.id ? (
+          <div key={item.id} className="inbox-edit">
+            <textarea
+              className="capture-textarea"
+              value={rascunho}
+              onChange={(event) => setRascunho(event.target.value)}
+            />
+            <TagChips
+              opcoes={tags.map((tag) => tag.nome)}
+              selecionadas={rascunhoTags}
+              onToggle={(tag) => alternarTag(rascunhoTags, setRascunhoTags, tag)}
+            />
+            <div className="inbox-edit-acoes">
+              <button
+                type="button"
+                className="btn-primario-sm"
+                disabled={rascunhoTags.length === 0}
+                onClick={() => salvarEdicao(item.id)}
+              >
                 Salvar
               </button>
-              <button type="button" onClick={cancelarEdicao}>
+              <button type="button" className="btn-secundario" onClick={cancelarEdicao}>
                 Cancelar
               </button>
-            </li>
-          ) : (
-            <li key={item.id}>
-              {ICONE_TIPO[item.tipo]} {item.conteudo ?? `(${item.tipo} sem legenda)`}
-              {' — '}
-              {item.tags.join(', ')}
-              <button type="button" onClick={() => iniciarEdicao(item)}>
-                Editar
+            </div>
+          </div>
+        ) : (
+          <div
+            key={item.id}
+            className="inbox-item"
+            onClick={() => {
+              setItemDetalheId(item.id);
+              setTela('detalhe');
+            }}
+          >
+            <span className="inbox-item-tipo">{LABEL_TIPO[item.tipo]}</span>
+            <div className="inbox-item-corpo">
+              <div className="inbox-item-conteudo">
+                {item.conteudo ?? `(${LABEL_TIPO[item.tipo]} sem legenda)`}
+              </div>
+              <div className="inbox-item-meta">
+                {item.tags.join(', ')} · {formatarDataHora(item.timestamp)}
+              </div>
+            </div>
+            <div className="inbox-item-acoes">
+              <button
+                type="button"
+                aria-label="Editar"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  iniciarEdicao(item);
+                }}
+              >
+                <Pencil size={18} strokeWidth={2} />
               </button>
-              <button type="button" onClick={() => excluir(item.id)}>
-                Excluir
+              <button
+                type="button"
+                className="acao-excluir"
+                aria-label="Excluir"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  excluirItem(item.id);
+                }}
+              >
+                <Trash2 size={18} strokeWidth={2} />
               </button>
-            </li>
-          ),
-        )}
-      </ul>
+            </div>
+          </div>
+        ),
+      )}
+
+      <div className="list-footer">Só itens pendentes aparecem aqui</div>
     </div>
   );
 }
