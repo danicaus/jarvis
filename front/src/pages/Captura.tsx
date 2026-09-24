@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
-import { Pencil, Settings, Trash2 } from 'lucide-react';
+import { Pencil, Settings, Timer as TimerIcon, Trash2 } from 'lucide-react';
 import {
   addInboxItem,
   addTag,
@@ -18,6 +18,7 @@ import { DURACAO_MAX_AUDIO_S, IMAGEM_MAX_DIMENSAO_PX, IMAGEM_QUALIDADE } from '.
 import { formatarDataHora, LABEL_TIPO } from '../format';
 import { Configuracoes } from './Configuracoes';
 import { ItemDetalhe } from './ItemDetalhe';
+import { Timer } from './Timer';
 
 type Modo = 'texto' | 'audio' | 'imagem';
 
@@ -93,7 +94,7 @@ function TagChips({
   );
 }
 
-type Tela = 'lista' | 'detalhe' | 'config';
+type Tela = 'lista' | 'detalhe' | 'config' | 'timer';
 
 interface CapturaProps {
   email: string;
@@ -326,6 +327,10 @@ export function Captura({ email, onSair }: CapturaProps) {
     setErro(err instanceof Error ? err.message : 'Erro inesperado.');
   }
 
+  if (tela === 'timer') {
+    return <Timer onVoltar={() => setTela('lista')} />;
+  }
+
   if (tela === 'config') {
     return (
       <Configuracoes
@@ -365,14 +370,19 @@ export function Captura({ email, onSair }: CapturaProps) {
       <header className="captura-header">
         <div className="captura-header-top">
           <span className="brand">Jarvis</span>
-          <button
-            type="button"
-            className="icon-btn"
-            onClick={() => setTela('config')}
-            aria-label="Configurações"
-          >
-            <Settings size={20} strokeWidth={2} />
-          </button>
+          <div className="captura-header-acoes">
+            <button type="button" className="icon-btn" onClick={() => setTela('timer')} aria-label="Timer">
+              <TimerIcon size={20} strokeWidth={2} />
+            </button>
+            <button
+              type="button"
+              className="icon-btn"
+              onClick={() => setTela('config')}
+              aria-label="Configurações"
+            >
+              <Settings size={20} strokeWidth={2} />
+            </button>
+          </div>
         </div>
         <h2>Captura</h2>
       </header>

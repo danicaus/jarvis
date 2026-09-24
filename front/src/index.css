@@ -264,3 +264,38 @@ button, textarea, input { font: inherit; color: inherit; }
 .settings-row-valor { font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 62%, transparent); }
 .settings-footer { padding: 20px 20px 28px; }
 .settings-footer p { margin: 0; font-size: 13px; line-height: 1.55; color: color-mix(in srgb, var(--color-text) 62%, transparent); }
+
+.captura-header-acoes { display: flex; gap: 16px; }
+
+/* — timer — */
+.timer-presets { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.timer-presets .btn-secundario { font-size: 18px; padding: 14px 0; }
+.timer-livre { display: flex; gap: 8px; margin-top: 8px; }
+.timer-livre input {
+  flex: 1; min-width: 0; border: 1px solid var(--color-divider); border-radius: 0;
+  background: transparent; padding: 10px 14px;
+}
+.timer-cores { display: flex; gap: 12px; margin-top: 12px; }
+.timer-cor { width: 40px; height: 40px; border: 0; border-radius: 0; cursor: pointer; }
+.timer-cor-ativa { outline: 3px solid var(--color-text); outline-offset: 3px; }
+
+/* Tela cheia: a barra de cor começa em 100% da largura e encolhe; os números
+   ficam por cima, do tamanho da tela, bem transparentes. */
+.timer-tela {
+  position: fixed; inset: 0; background: #141414; overflow: hidden;
+  user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; touch-action: none;
+}
+.timer-barra { position: absolute; inset: 0 auto 0 0; background: var(--timer-cor); }
+.timer-numeros {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-heading); font-weight: 800; line-height: 1; letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums; white-space: nowrap; color: #fff; opacity: 0.16;
+}
+.timer-dica {
+  position: absolute; bottom: 3vmin; width: 100%; text-align: center; font-size: 3vmin;
+  letter-spacing: 0.08em; text-transform: uppercase; color: #fff; opacity: 0; transition: opacity 0.4s;
+}
+.timer-pausado .timer-dica { opacity: 0.5; }
+.timer-pausado .timer-barra { opacity: 0.55; }
+.timer-fim { animation: timer-pisca 1s steps(2) infinite; }
+@keyframes timer-pisca { 50% { background: var(--timer-cor); } }
